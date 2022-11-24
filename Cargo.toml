@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 spectrum = {path = "../spectrum"}
+rusqlite = "0.28.0"
