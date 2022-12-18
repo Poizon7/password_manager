@@ -1,13 +1,19 @@
 extern crate rpassword;
-use rusqlite::{Connection, Error, OpenFlags, Result};
+use rusqlite::{Connection, OpenFlags, Result};
 use serde::{Serialize, Deserialize};
 
 use spectrum::cryptography::{encrypt, decrypt, hash, aes::AES, sha::SHA};
 
 #[derive(Debug)]
-enum APIError {
-    Error,
+pub enum APIError {
+    DatabaseError(rusqlite::Error),
     IncorrectPassword
+}
+
+impl From<rusqlite::Error> for APIError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self::DatabaseError(error)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -26,7 +32,7 @@ fn encrypt_password(password: String) -> (String, AES) {
     (encrypt(&crypto, password).unwrap(), crypto)
 }
 
-fn check_password() -> Result<AES, Error> {
+fn check_password() -> Result<AES, rusqlite::Error> {
    loop {
         let password = rpassword::prompt_password("Enter password: ").unwrap();
 
@@ -47,7 +53,7 @@ fn check_password() -> Result<AES, Error> {
     };
 }
 
-pub fn init_database() -> Result<(), Error> {
+pub fn init_database() -> Result<(), rusqlite::Error> {
     let mut password;
     loop {
         password = rpassword::prompt_password("Enter password: ").unwrap();
@@ -76,7 +82,7 @@ pub fn init_database() -> Result<(), Error> {
     Ok(())
 }
 
-pub fn add_password(arg: String) -> Result<(), Error> {
+pub fn add_password(arg: String) -> Result<(), rusqlite::Error> {
     let crypto = check_password()?;
 
     let arg: Vec<&str> = arg.split(':').into_iter().collect();
@@ -98,7 +104,7 @@ pub fn add_password(arg: String) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn get_password(site: String) -> Result<(), Error> {
+pub fn get_password(site: String) -> Result<(), rusqlite::Error> {
     let crypto = check_password()?;
 
     let site = encrypt(&crypto, site).unwrap();
@@ -122,13 +128,13 @@ pub fn get_password(site: String) -> Result<(), Error> {
 fn check_password_api(password: &str) -> Result<AES, APIError> {
     let (password, crypto) = encrypt_password(password.to_string());
 
-    let conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    let conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
 
     let mut stat = conn
         .prepare("SELECT password from password WHERE site='user' AND password=(?)")
         .expect("failed to prepare!");
 
-    if stat.exists([password]).unwrap() {
+    if stat.exists([password])? {
         Ok(crypto)
     }
     else {
@@ -136,8 +142,8 @@ fn check_password_api(password: &str) -> Result<AES, APIError> {
     }
 }
 
-pub fn get_password_api(site: &str, password: &str) -> Result<String, Error> {
-    let crypto = check_password_api(password).unwrap();
+pub fn get_password_api(site: &str, password: &str) -> Result<String, APIError> {
+    let crypto = check_password_api(password)?;
 
     let site = encrypt(&crypto, site.to_string()).unwrap();
 
@@ -156,8 +162,8 @@ pub fn get_password_api(site: &str, password: &str) -> Result<String, Error> {
     Ok(password)
 }
 
-pub fn set_password_api(site: &str, password: &str, master_password: &str) -> Result<bool, Error> {
-    let crypto = check_password_api(master_password).unwrap();
+pub fn set_password_api(site: &str, password: &str, master_password: &str) -> Result<bool, APIError> {
+    let crypto = check_password_api(master_password)?;
 
     let site = encrypt(&crypto, site.to_string()).unwrap();
     let password = encrypt(&crypto, password.to_string()).unwrap();

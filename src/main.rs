@@ -22,10 +22,8 @@ async fn main() -> std::io::Result<()> {
 
             App::new()
                 .wrap(cors)
-                .service(rest_api::hello)
                 .service(rest_api::get_password)
                 .service(rest_api::set_password)
-                .service(rest_api::echo)
         })
         .bind(("127.0.0.1", 8080))?
         .run()
