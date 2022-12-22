@@ -1,7 +1,7 @@
 use actix_web::{post, HttpResponse, web};
 use serde::{Serialize, Deserialize};
 
-use crate::database_integration::{get_password_api, set_password_api};
+use crate::database;
 
 #[derive(Debug, Deserialize)]
 struct GetRequest {
@@ -11,26 +11,29 @@ struct GetRequest {
 
 #[derive(Debug, Serialize)]
 struct GetResponse {
+    username: String,
     password: String
 }
 
 #[derive(Debug, Deserialize)]
 struct SetRequest {
     site: String,
+    username: String,
     password: String,
     master_password: String
 }
 
 #[derive(Debug, Serialize)]
 struct SetResponse {
-    status: bool
+    status: String
 }
 
 #[post("/get")]
 async fn get_password(req: web::Json<GetRequest>) -> HttpResponse {
-    let password = get_password_api(&req.site, &req.master_password).unwrap();
+    let (username, password) = database::get_password(&req.site, &req.master_password).unwrap();
 
     let res = GetResponse {
+        username,
         password
     };
 
@@ -41,7 +44,7 @@ async fn get_password(req: web::Json<GetRequest>) -> HttpResponse {
 
 #[post("/set")]
 async fn set_password(req: web::Json<SetRequest>) -> HttpResponse {
-    let status = set_password_api(&req.site, &req.password, &req.master_password).unwrap();
+    let status = database::set_password(&req.site, &req.username, &req.password, &req.master_password).unwrap();
 
     let res = SetResponse {
         status

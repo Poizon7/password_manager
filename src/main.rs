@@ -1,9 +1,7 @@
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, http};
 
-mod database_integration;
-use crate::database_integration::{init_database, add_password, get_password};
-
+mod database;
 mod rest_api;
 
 use std::env;
@@ -31,14 +29,43 @@ async fn main() -> std::io::Result<()> {
     }
     else {
         match args[1].as_str() {
-            "init" => init_database(),
-            "set" => add_password(args[2].clone()),
-            "get" => get_password(args[2].clone()),
+            "init" => {
+                database::init_database().unwrap();
+            },
+            "set" => {
+                let mut args = args[2].split(':');
+                let site = args.next().unwrap();
+                let username = args.next().unwrap();
+                let password = args.next().unwrap();
+
+                let master_password = &rpassword::prompt_password("Enter password: ").unwrap();
+
+                println!("{}", database::set_password(site, username, password, master_password).unwrap());
+            },
+            "get" => {
+                let mut args = args[2].split(':');
+                let site = args.next().unwrap();
+
+                let master_password = &rpassword::prompt_password("Enter password: ").unwrap();
+
+                let (username, password) = database::get_password(site, master_password).unwrap();
+
+                println!("Username: {}", username);
+                println!("Password: {}", password);
+            },
+            "gen" => {
+                let mut args = args[2].split(':');
+                let site = args.next().unwrap();
+                let username = args.next().unwrap();
+
+                let master_password = &rpassword::prompt_password("Enter password: ").unwrap();
+
+                println!("{}", database::gen_password(site, username, master_password).unwrap());
+            },
             _ => {
                 panic!("Incorrect arguments!");
             }
         }
-        .unwrap();
 
         Ok(())
     }

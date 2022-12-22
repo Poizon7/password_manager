@@ -782,6 +782,7 @@ dependencies = [
  "actix-cors",
  "actix-web",
  "futures",
+ "rand",
  "rpassword",
  "rusqlite",
  "serde",
