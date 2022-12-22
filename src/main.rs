@@ -48,10 +48,10 @@ async fn main() -> std::io::Result<()> {
 
                 let master_password = &rpassword::prompt_password("Enter password: ").unwrap();
 
-                let (username, password) = database::get_password(site, master_password).unwrap();
+                let site = database::get_password(site, master_password).unwrap();
 
-                println!("Username: {}", username);
-                println!("Password: {}", password);
+                println!("Username: {}", site.username);
+                println!("Password: {}", site.password);
             },
             "gen" => {
                 let mut args = args[2].split(':');
@@ -62,6 +62,18 @@ async fn main() -> std::io::Result<()> {
 
                 println!("{}", database::gen_password(site, username, master_password).unwrap());
             },
+            "show" => {
+                let master_password = &rpassword::prompt_password("Enter password: ").unwrap();
+
+                let sites = database::show_passwords(master_password).unwrap();
+
+                for site in sites {
+                    println!();
+                    println!("{}", site.site);
+                    println!("Username: {}", site.username);
+                    println!("Password: {}", site.password);
+                }
+            }
             _ => {
                 panic!("Incorrect arguments!");
             }

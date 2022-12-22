@@ -30,11 +30,11 @@ struct SetResponse {
 
 #[post("/get")]
 async fn get_password(req: web::Json<GetRequest>) -> HttpResponse {
-    let (username, password) = database::get_password(&req.site, &req.master_password).unwrap();
+    let site = database::get_password(&req.site, &req.master_password).unwrap();
 
     let res = GetResponse {
-        username,
-        password
+        username: site.username,
+        password: site.password
     };
 
     HttpResponse::Ok()

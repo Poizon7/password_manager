@@ -1,4 +1,5 @@
 extern crate rpassword;
+
 use rusqlite::{Connection, OpenFlags, Result};
 use serde::{Serialize, Deserialize};
 use rand::{rngs::OsRng, Rng};
@@ -25,7 +26,7 @@ impl From<cryptography::CryptoError> for Error {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Password {
+pub struct Site {
     pub site: String,
     pub username: String,
     pub password: String,
@@ -54,23 +55,26 @@ fn check_password(password: &str) -> Result<AES, Error> {
     }
 }
 
-fn select_from_database(crypto: &AES, site: &str) -> Result<(String, String), Error> {
+fn select_from_database(crypto: &AES, site: &str) -> Result<Site, Error> {
+    let site_plain = site;
     let site = encrypt(crypto, site.to_string())?;
 
     let conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
 
     let mut stmt = conn.prepare("SELECT username, password FROM password WHERE site = (?)")?;
 
-    let passwords = stmt.query_map([&site], |row| {
-        Ok((row.get(0)?, row.get(1)?))
+    let mut passwords = stmt.query_map([&site], |row| {
+        let username: String = decrypt(crypto, row.get(0).unwrap()).unwrap();
+        let password: String = decrypt(crypto, row.get(1).unwrap()).unwrap();
+
+        Ok(Site {
+            site: site_plain.to_string(),
+            username,
+            password
+        })
     })?;
 
-    let (mut username, mut password) = passwords.into_iter().next().unwrap().unwrap();
-
-    username = decrypt(crypto, username)?;
-    password = decrypt(crypto, password)?;
-
-    Ok((username, password))
+    Ok(passwords.next().unwrap().unwrap())
 }
 
 fn insert_into_database(crypto: &AES, site: &str, username: &str, password: &str) -> Result<(), Error> {
@@ -122,12 +126,10 @@ pub fn init_database() -> Result<(), Error> {
     Ok(())
 }
 
-pub fn get_password(site: &str, master_password: &str) -> Result<(String, String), Error> {
+pub fn get_password(site: &str, master_password: &str) -> Result<Site, Error> {
     let crypto = check_password(master_password)?;
 
-    let (username, password) = select_from_database(&crypto, site).unwrap();
-
-    Ok((username, password))
+    Ok(select_from_database(&crypto, site).unwrap())
 }
 
 pub fn set_password(site: &str, username: &str, password: &str, master_password: &str) -> Result<String, Error> {
@@ -155,3 +157,30 @@ pub fn gen_password(site: &str, username: &str, master_password: &str) -> Result
     Ok("Success".to_string())
 }
 
+pub fn show_passwords(master_password: &str) -> Result<Vec<Site>, Error> {
+    let crypto = check_password(master_password).unwrap();
+    
+    let conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+
+    let mut stmt = conn.prepare("SELECT site, username, password FROM password WHERE NOT site = 'user'")?;
+
+    let sites_iter = stmt.query_map([], |row| {
+        let site: String = decrypt(&crypto, row.get(0).unwrap()).unwrap();
+        let username: String = decrypt(&crypto, row.get(1).unwrap()).unwrap();
+        let password: String = decrypt(&crypto, row.get(2).unwrap()).unwrap();
+
+        Ok(Site {
+            site,
+            username,
+            password
+        })
+    })?;
+
+    let mut sites = Vec::new();
+
+    for site in sites_iter {
+        sites.push(site.unwrap());
+    }
+
+    Ok(sites)
+}
