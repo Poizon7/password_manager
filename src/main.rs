@@ -22,6 +22,7 @@ async fn main() -> std::io::Result<()> {
                 .wrap(cors)
                 .service(rest_api::get_password)
                 .service(rest_api::set_password)
+                .service(rest_api::gen_password)
         })
         .bind(("127.0.0.1", 8080))?
         .run()
@@ -73,6 +74,13 @@ async fn main() -> std::io::Result<()> {
                     println!("Username: {}", site.username);
                     println!("Password: {}", site.password);
                 }
+            }
+            "burn" => {
+                let master_password = &rpassword::prompt_password("Enter password: ").unwrap();
+
+                database::burn(master_password).unwrap();
+
+                println!("Success");
             }
             _ => {
                 panic!("Incorrect arguments!");

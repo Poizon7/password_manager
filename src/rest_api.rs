@@ -28,6 +28,18 @@ struct SetResponse {
     status: String
 }
 
+#[derive(Debug, Deserialize)]
+struct GenRequest {
+    site: String,
+    username: String,
+    master_password: String
+}
+
+#[derive(Debug, Serialize)]
+struct GenResponse {
+    password: String
+}
+
 #[post("/get")]
 async fn get_password(req: web::Json<GetRequest>) -> HttpResponse {
     let site = database::get_password(&req.site, &req.master_password).unwrap();
@@ -48,6 +60,19 @@ async fn set_password(req: web::Json<SetRequest>) -> HttpResponse {
 
     let res = SetResponse {
         status
+    };
+
+    HttpResponse::Ok()
+        .insert_header(("Content-Security-Policy", "default-src 'self' *"))
+        .json(res)
+}
+
+#[post("/gen")]
+async fn gen_password(req: web::Json<GenRequest>) -> HttpResponse {
+    let password = database::gen_password(&req.site, &req.username, &req.master_password).unwrap();
+
+    let res = GenResponse {
+        password
     };
 
     HttpResponse::Ok()

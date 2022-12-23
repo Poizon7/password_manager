@@ -4,13 +4,16 @@ use rusqlite::{Connection, OpenFlags, Result};
 use serde::{Serialize, Deserialize};
 use rand::{rngs::OsRng, Rng};
 
+use std::fs;
+
 use spectrum::cryptography::{self, encrypt, decrypt, hash, aes::AES, sha::SHA};
 
 #[derive(Debug)]
 pub enum Error {
     DatabaseError(rusqlite::Error),
     IncorrectPassword,
-    CryptoError(cryptography::CryptoError)
+    CryptoError(cryptography::CryptoError),
+    FileError(std::io::Error)
 }
 
 impl From<rusqlite::Error> for Error {
@@ -22,6 +25,12 @@ impl From<rusqlite::Error> for Error {
 impl From<cryptography::CryptoError> for Error {
     fn from(error: cryptography::CryptoError) -> Self {
         Self::CryptoError(error)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(error: std::io::Error) -> Self {
+        Self::FileError(error)
     }
 }
 
@@ -82,12 +91,23 @@ fn insert_into_database(crypto: &AES, site: &str, username: &str, password: &str
     let username = encrypt(crypto, username.to_string())?;
     let password = encrypt(crypto, password.to_string())?;
 
-    let conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+    let mut conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
 
-    conn.execute(
+    let tx = conn.transaction()?;
+
+    let result = tx.execute(
         "INSERT INTO password (site, username, password) VALUES (?1, ?2, ?3)",
         (&site, &username, &password),
-    )?;
+    );
+
+    if matches!(result, Err(_)) {
+        tx.execute(
+            "UPDATE password SET password = (?1), password = (?2) WHERE site = (?3)",
+            (&username, &password, &site)
+        )?;
+    }
+
+    tx.commit()?;
 
     Ok(())
 }
@@ -183,4 +203,9 @@ pub fn show_passwords(master_password: &str) -> Result<Vec<Site>, Error> {
     }
 
     Ok(sites)
+}
+
+pub fn burn(master_password: &str) -> Result<(), Error> {
+    check_password(master_password)?;
+    Ok(fs::remove_file(DATABASE)?)
 }
