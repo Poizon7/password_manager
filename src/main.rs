@@ -24,49 +24,49 @@ async fn main() -> std::io::Result<()> {
                 .service(rest_api::set_password)
                 .service(rest_api::gen_password)
         })
-        .bind(("127.0.0.1", 8080))?
+        .bind(("127.0.0.1", 8080)).expect("failed to bind server to port")
         .run()
         .await
     }
     else {
         match args[1].as_str() {
             "init" => {
-                database::init_database().unwrap();
+                database::init_database().expect("failed to initialise database");
             },
             "set" => {
                 let mut args = args[2].split(':');
-                let site = args.next().unwrap();
-                let username = args.next().unwrap();
-                let password = args.next().unwrap();
+                let site = args.next().expect("incorrect arguments should be formated site:username:password");
+                let username = args.next().expect("incorrect arguments should be formated site:username:password");
+                let password = args.next().expect("incorrect arguments should be formated site:username:password");
 
-                let master_password = &rpassword::prompt_password("Enter password: ").unwrap();
+                let master_password = &rpassword::prompt_password("Enter password: ").expect("failed to get password");
 
-                println!("{}", database::set_password(site, username, password, master_password).unwrap());
+                println!("{}", database::set_password(site, username, password, master_password).expect("failed to set password"));
             },
             "get" => {
                 let mut args = args[2].split(':');
-                let site = args.next().unwrap();
+                let site = args.next().expect("incorrect arguments should be formated site");
 
-                let master_password = &rpassword::prompt_password("Enter password: ").unwrap();
+                let master_password = &rpassword::prompt_password("Enter password: ").expect("failed to get password");
 
-                let site = database::get_password(site, master_password).unwrap();
+                let site = database::get_password(site, master_password).expect("failed to get password");
 
                 println!("Username: {}", site.username);
                 println!("Password: {}", site.password);
             },
             "gen" => {
                 let mut args = args[2].split(':');
-                let site = args.next().unwrap();
-                let username = args.next().unwrap();
+                let site = args.next().expect("incorrect arguments should be formated site:username");
+                let username = args.next().expect("incorrect arguments should be formated site:username");
 
-                let master_password = &rpassword::prompt_password("Enter password: ").unwrap();
+                let master_password = &rpassword::prompt_password("Enter password: ").expect("failed to get password");
 
-                println!("{}", database::gen_password(site, username, master_password).unwrap());
+                println!("{}", database::gen_password(site, username, master_password).expect("failed to generate password"));
             },
             "show" => {
-                let master_password = &rpassword::prompt_password("Enter password: ").unwrap();
+                let master_password = &rpassword::prompt_password("Enter password: ").expect("failed to get password");
 
-                let sites = database::show_passwords(master_password).unwrap();
+                let sites = database::show_passwords(master_password).expect("failed to show password");
 
                 for site in sites {
                     println!();
@@ -75,10 +75,17 @@ async fn main() -> std::io::Result<()> {
                     println!("Password: {}", site.password);
                 }
             }
-            "burn" => {
-                let master_password = &rpassword::prompt_password("Enter password: ").unwrap();
+            "del" => {
+                let site = args[2].clone();
 
-                database::burn(master_password).unwrap();
+                let master_password = &rpassword::prompt_password("Enter password: ").expect("failed to get password");
+
+                println!("{}", database::delete_password(&site, master_password).expect("failed to delete password"));
+            }
+            "burn" => {
+                let master_password = &rpassword::prompt_password("Enter password: ").expect("failed to get password");
+
+                database::burn(master_password).expect("failed to delete database");
 
                 println!("Success");
             }

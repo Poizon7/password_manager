@@ -10,27 +10,27 @@ use spectrum::cryptography::{self, encrypt, decrypt, hash, aes::AES, sha::SHA};
 
 #[derive(Debug)]
 pub enum Error {
-    DatabaseError(rusqlite::Error),
+    Database(rusqlite::Error),
     IncorrectPassword,
-    CryptoError(cryptography::CryptoError),
-    FileError(std::io::Error)
+    Crypto(cryptography::CryptoError),
+    File(std::io::Error)
 }
 
 impl From<rusqlite::Error> for Error {
     fn from(error: rusqlite::Error) -> Self {
-        Self::DatabaseError(error)
+        Self::Database(error)
     }
 }
 
 impl From<cryptography::CryptoError> for Error {
     fn from(error: cryptography::CryptoError) -> Self {
-        Self::CryptoError(error)
+        Self::Crypto(error)
     }
 }
 
 impl From<std::io::Error> for Error {
     fn from(error: std::io::Error) -> Self {
-        Self::FileError(error)
+        Self::File(error)
     }
 }
 
@@ -47,14 +47,14 @@ fn check_password(password: &str) -> Result<AES, Error> {
     let sha = SHA::new();
     let password = hash(&sha, password.to_string());
 
-    let crypto = AES::from_hex(&password).unwrap();
-    let password = encrypt(&crypto, password).unwrap();
+    let crypto = AES::from_hex(&password).expect("failed to create AES struct from password");
+    let password = encrypt(&crypto, password).expect("failed to encrypt password");
 
     let conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
 
     let mut stat = conn
-        .prepare("SELECT password from password WHERE site='user' AND password=(?)")
-        .expect("failed to prepare!");
+        .prepare("SELECT password FROM password WHERE site='user' AND password=(?)")
+        .expect("failed to prepare SQL statement!");
 
     if stat.exists([password])? {
         Ok(crypto)
@@ -112,11 +112,11 @@ fn insert_into_database(crypto: &AES, site: &str, username: &str, password: &str
     Ok(())
 }
 
-pub fn init_database() -> Result<(), Error> {
+pub fn init_database() -> Result<(), rusqlite::Error> {
     let mut password;
     loop {
-        password = rpassword::prompt_password("Enter password: ").unwrap();
-        if password == rpassword::prompt_password("Repeat password: ").unwrap() {
+        password = rpassword::prompt_password("Enter password: ").expect("failed to get password");
+        if password == rpassword::prompt_password("Repeat password: ").expect("failed to get password") {
             break;
         }
     }
@@ -124,8 +124,8 @@ pub fn init_database() -> Result<(), Error> {
     let sha = SHA::new();
     let password = hash(&sha, password);
 
-    let crypto = AES::from_hex(&password)?;
-    let password = encrypt(&crypto, password)?;
+    let crypto = AES::from_hex(&password).expect("failed to create AES struct from password");
+    let password = encrypt(&crypto, password).expect("failed to encrypt password");
 
     let conn = Connection::open(DATABASE)?;
 
@@ -149,19 +149,21 @@ pub fn init_database() -> Result<(), Error> {
 pub fn get_password(site: &str, master_password: &str) -> Result<Site, Error> {
     let crypto = check_password(master_password)?;
 
-    Ok(select_from_database(&crypto, site).unwrap())
+    let site = select_from_database(&crypto, site)?;
+
+    Ok(site)
 }
 
 pub fn set_password(site: &str, username: &str, password: &str, master_password: &str) -> Result<String, Error> {
     let crypto = check_password(master_password)?;
 
-    insert_into_database(&crypto, site, username, password).unwrap();
+    insert_into_database(&crypto, site, username, password)?;
 
     Ok("Success".to_string())
 }
 
 pub fn gen_password(site: &str, username: &str, master_password: &str) -> Result<String, Error> {
-    let crypto = check_password(master_password).unwrap();
+    let crypto = check_password(master_password)?;
 
     const PASSWORD_LEN: usize = 16;
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#%&()=?${[]}<>*'^~";
@@ -178,7 +180,7 @@ pub fn gen_password(site: &str, username: &str, master_password: &str) -> Result
 }
 
 pub fn show_passwords(master_password: &str) -> Result<Vec<Site>, Error> {
-    let crypto = check_password(master_password).unwrap();
+    let crypto = check_password(master_password)?;
     
     let conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
 
@@ -203,6 +205,18 @@ pub fn show_passwords(master_password: &str) -> Result<Vec<Site>, Error> {
     }
 
     Ok(sites)
+}
+
+pub fn delete_password(site: &str, master_password: &str) -> Result<String, Error> {
+    let crypto = check_password(master_password)?;
+
+    let site = encrypt(&crypto, site.to_string())?;
+
+    let conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+
+    conn.execute("DELETE FROM password WHERE site = (?)", [site])?;
+
+    Ok("Success".to_string())
 }
 
 pub fn burn(master_password: &str) -> Result<(), Error> {
