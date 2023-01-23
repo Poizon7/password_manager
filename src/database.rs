@@ -6,25 +6,18 @@ use rand::{rngs::OsRng, Rng};
 
 use std::fs;
 
-use spectrum::cryptography::{self, encrypt, decrypt, hash, aes::AES, sha::SHA};
+use spectrum::cryptography::{encrypt, decrypt, hash, aes::AES, sha::SHA};
 
 #[derive(Debug)]
 pub enum Error {
     Database(rusqlite::Error),
     IncorrectPassword,
-    Crypto(cryptography::CryptoError),
     File(std::io::Error)
 }
 
 impl From<rusqlite::Error> for Error {
     fn from(error: rusqlite::Error) -> Self {
         Self::Database(error)
-    }
-}
-
-impl From<cryptography::CryptoError> for Error {
-    fn from(error: cryptography::CryptoError) -> Self {
-        Self::Crypto(error)
     }
 }
 
@@ -48,7 +41,7 @@ fn check_password(password: &str) -> Result<AES, Error> {
     let password = hash(&sha, password.to_string());
 
     let crypto = AES::from_hex(&password).expect("failed to create AES struct from password");
-    let password = encrypt(&crypto, password).expect("failed to encrypt password");
+    let password = encrypt(&crypto, password);
 
     let conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
 
@@ -66,7 +59,7 @@ fn check_password(password: &str) -> Result<AES, Error> {
 
 fn select_from_database(crypto: &AES, site: &str) -> Result<Site, Error> {
     let site_plain = site;
-    let site = encrypt(crypto, site.to_string())?;
+    let site = encrypt(crypto, site.to_string());
 
     let conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
 
@@ -87,9 +80,9 @@ fn select_from_database(crypto: &AES, site: &str) -> Result<Site, Error> {
 }
 
 fn insert_into_database(crypto: &AES, site: &str, username: &str, password: &str) -> Result<(), Error> {
-    let site = encrypt(crypto, site.to_string())?;
-    let username = encrypt(crypto, username.to_string())?;
-    let password = encrypt(crypto, password.to_string())?;
+    let site = encrypt(crypto, site.to_string());
+    let username = encrypt(crypto, username.to_string());
+    let password = encrypt(crypto, password.to_string());
 
     let mut conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
 
@@ -125,7 +118,7 @@ pub fn init_database() -> Result<(), rusqlite::Error> {
     let password = hash(&sha, password);
 
     let crypto = AES::from_hex(&password).expect("failed to create AES struct from password");
-    let password = encrypt(&crypto, password).expect("failed to encrypt password");
+    let password = encrypt(&crypto, password);
 
     let conn = Connection::open(DATABASE)?;
 
@@ -210,7 +203,7 @@ pub fn show_passwords(master_password: &str) -> Result<Vec<Site>, Error> {
 pub fn delete_password(site: &str, master_password: &str) -> Result<String, Error> {
     let crypto = check_password(master_password)?;
 
-    let site = encrypt(&crypto, site.to_string())?;
+    let site = encrypt(&crypto, site.to_string());
 
     let conn = Connection::open_with_flags(DATABASE, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
 
